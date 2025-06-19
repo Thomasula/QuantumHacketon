@@ -1,55 +1,46 @@
-import random
 import numpy as np
-from qiskit import QuantumCircuit, Aer, execute
+import random
+import matplotlib.pyplot as plt
+from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
-# ========================
-# CONFIG
-# ========================
-NUM_QUBITS = 2
-POPULATION_SIZE = 10
-NUM_GENERATIONS = 20
-MUTATION_RATE = 0.3
+
+# Configuration
+NUM_QUBITS = 3
+POP_SIZE = 10
+N_GEN = 50
+MUTATION_RATE = 0.5
 ELITE_SIZE = 2
+LAMBDA_DEPTH = 0.1
 
-TARGET_PROB_DIST = {
-    '00': 0.1,
-    '01': 0.2,
-    '10': 0.3,
-    '11': 0.4
-}
+# Target distribution
+x = np.arange(2**NUM_QUBITS)
+p_target = np.exp(-0.5 * ((x - 3.5) / 1.0)**2)
+p_target /= np.sum(p_target)
+psi_target = np.sqrt(p_target)
 
-def target_statevector(dist):
-    vec = np.zeros(2**NUM_QUBITS, dtype=complex)
-    for bitstring, prob in dist.items():
-        idx = int(bitstring, 2)
-        vec[idx] = np.sqrt(prob)
-    norm = np.linalg.norm(vec)
-    return vec / norm
+# Helper functions
+def kl_divergence(p, q, eps=1e-10):
+    p = np.clip(p, eps, 1)
+    q = np.clip(q, eps, 1)
+    return np.sum(p * np.log(p / q))
 
-TARGET_STATE = target_statevector(TARGET_PROB_DIST)
-
-# ========================
-# CIRCUIT ENCODING
-# ========================
 GATES = ['h', 'x', 'y', 'z', 'rx', 'ry', 'rz', 'cx']
 
-
 def random_gate():
-    gate = random.choice(GATES)
-    if gate in ['rx', 'ry', 'rz']:
-        return (gate, random.randint(0, NUM_QUBITS - 1), random.uniform(0, 2 * np.pi))
-    elif gate == 'cx':
+    g = random.choice(GATES)
+    if g in ['rx', 'ry', 'rz']:
+        return (g, random.randint(0, NUM_QUBITS - 1), random.uniform(0, 2*np.pi))
+    elif g == 'cx':
         control = random.randint(0, NUM_QUBITS - 1)
         target = (control + 1) % NUM_QUBITS
-        return (gate, control, target)
+        return (g, control, target)
     else:
-        return (gate, random.randint(0, NUM_QUBITS - 1))
+        return (g, random.randint(0, NUM_QUBITS - 1))
 
-
-def build_circuit(gate_list):
+def build_circuit(gates):
     qc = QuantumCircuit(NUM_QUBITS)
-    for gate in gate_list:
+    for gate in gates:
         if gate[0] in ['rx', 'ry', 'rz']:
             getattr(qc, gate[0])(gate[2], gate[1])
         elif gate[0] == 'cx':
@@ -58,65 +49,78 @@ def build_circuit(gate_list):
             getattr(qc, gate[0])(gate[1])
     return qc
 
+def fitness(ind):
+    qc = build_circuit(ind)
+    state = Statevector.from_instruction(qc)
+    probs = np.abs(state.data)**2
+    kl = kl_divergence(p_target, probs)
+    penalty = LAMBDA_DEPTH * qc.depth()
+    return -(kl + penalty)  # maximize negative loss
+
+# GA functions
+def mutate(ind):
+    ind = ind.copy()
+    if random.random() < 0.5 and len(ind) > 1:
+        ind[random.randint(0, len(ind)-1)] = random_gate()
+    else:
+        ind.append(random_gate())
+    return ind
+
+def crossover(p1, p2):
+    if len(p1) < 2 or len(p2) < 2:
+        return p1
+    point = random.randint(1, min(len(p1), len(p2)) - 1)
+    return p1[:point] + p2[point:]
+
+def select(pop, fitnesses):
+    sorted_pop = [x for _, x in sorted(zip(fitnesses, pop), reverse=True)]
+    return sorted_pop[:ELITE_SIZE] + random.choices(sorted_pop[:5], k=POP_SIZE - ELITE_SIZE)
 
 def random_individual(length=10):
     return [random_gate() for _ in range(length)]
 
+# Main GA loop
+population = [random_individual() for _ in range(POP_SIZE)]
+best_fitness = -np.inf
+best_individual = None
 
-# ========================
-# FITNESS FUNCTION
-# ========================
-def fitness(individual):
-    qc = build_circuit(individual)
-    backend = Aer.get_backend('statevector_simulator')
-    job = execute(qc, backend)
-    result = job.result()
-    state = result.get_statevector(qc)
-    fidelity = np.abs(np.dot(np.conj(TARGET_STATE), state)) ** 2
-    return fidelity
-
-
-# ========================
-# GA OPERATIONS
-# ========================
-def mutate(individual):
-    new = individual.copy()
-    if random.random() < 0.5 and len(new) > 1:
-        idx = random.randint(0, len(new) - 1)
-        new[idx] = random_gate()
-    else:
-        new.append(random_gate())
-    return new
-
-
-def crossover(parent1, parent2):
-    split = random.randint(1, min(len(parent1), len(parent2)) - 1)
-    child = parent1[:split] + parent2[split:]
-    return child
-
-
-def select(population, fitnesses):
-    sorted_pop = [x for _, x in sorted(zip(fitnesses, population), reverse=True)]
-    return sorted_pop[:ELITE_SIZE] + random.choices(sorted_pop[:5], k=POPULATION_SIZE - ELITE_SIZE)
-
-
-# ========================
-# MAIN LOOP
-# ========================
-population = [random_individual() for _ in range(POPULATION_SIZE)]
-
-for gen in range(NUM_GENERATIONS):
+for gen in range(N_GEN):
     fitnesses = [fitness(ind) for ind in population]
-    print(f"Gen {gen}, max fitness: {max(fitnesses):.4f}")
-
+    max_fit = max(fitnesses)
+    print(f"Gen {gen}, best fitness: {-max_fit:.4f}")
+    if max_fit > best_fitness:
+        best_fitness = max_fit
+        best_individual = population[np.argmax(fitnesses)]
     selected = select(population, fitnesses)
-    next_population = selected[:ELITE_SIZE]
-
-    while len(next_population) < POPULATION_SIZE:
+    new_pop = selected[:ELITE_SIZE]
+    while len(new_pop) < POP_SIZE:
         p1, p2 = random.sample(selected, 2)
         child = crossover(p1, p2)
         if random.random() < MUTATION_RATE:
             child = mutate(child)
-        next_population.append(child)
+        new_pop.append(child)
+    population = new_pop
 
-    population = next_population
+# Evaluate best individual
+qc_best = build_circuit(best_individual)
+print(qc_best.draw(output='text'))
+state_best = Statevector.from_instruction(qc_best)
+probs_best = np.abs(state_best.data) ** 2
+kl_best = kl_divergence(p_target, probs_best)
+
+# Plot
+labels = [f'{i:03b}' for i in range(len(p_target))]
+x = np.arange(len(p_target))
+
+plt.figure(figsize=(10, 5))
+plt.bar(x - 0.15, p_target, width=0.3, label='Target', align='center')
+plt.bar(x + 0.15, probs_best, width=0.3, label='Best Circuit', align='center')
+plt.xticks(x, labels)
+plt.xlabel('Basis State')
+plt.ylabel('Probability')
+plt.title(f'Final KL Divergence: {kl_best:.5f}')
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+print("Best circuit:\n", qc_best.draw())
