@@ -26,13 +26,13 @@ def kl_divergence(p, q, eps=1e-10):
     q = np.clip(q, eps, 1)
     return np.sum(p * np.log(p / q))
 
-GATES = ['h', 'x', 'y', 'z', 'rx', 'ry', 'rz', 'cx']
+GATES = ['h', 'x', 'y', 'z', 'rx', 'ry', 'rz', 'cx', 'sx', 'cz']
 
 def random_gate():
     g = random.choice(GATES)
     if g in ['rx', 'ry', 'rz']:
         return (g, random.randint(0, NUM_QUBITS - 1), random.uniform(0, 2*np.pi))
-    elif g == 'cx':
+    elif g == ['cx', 'cz']:
         control = random.randint(0, NUM_QUBITS - 1)
         target = (control + 1) % NUM_QUBITS
         return (g, control, target)
@@ -46,6 +46,8 @@ def build_circuit(gates):
             getattr(qc, gate[0])(gate[2], gate[1])
         elif gate[0] == 'cx':
             qc.cx(gate[1], gate[2])
+        elif: gate[0] == 'cz':
+            qc.cz(gate[1], gate[2])
         else:
             getattr(qc, gate[0])(gate[1])
     return qc
