@@ -3,18 +3,50 @@ import random
 import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
+import pandas as pd
+
+
+# Read-in error table
+df = pd.read_csv('ibm_aachen_calibrations_2025-06-19T09_34_49Z.csv')
+# print(df.head())
+
+mean_RX_error = df.loc[df['RX error '] != 1.0, 'RX error '].mean()
+print(f"mean_RX_error: {mean_RX_error}")
+mean_SX_error = df.loc[df['√x (sx) error '] != 1.0, '√x (sx) error '].mean()
+print(f"mean_SX_error: {mean_SX_error}")
+mean_X_error = df.loc[df['Pauli-X error '] != 1.0,'Pauli-X error ' ].mean()
+print(f"mean_X_error: {mean_X_error}")
+
+def extract_mean(s):
+    values = [float(part.split(':')[1]) for part in s.split(';')]
+    filtered = [v for v in values if v != 1.0]
+    return sum(filtered) / len(filtered) if filtered else None  # or 0, np.nan, etc.
+
+df['CZ error '] = df['CZ error '].apply(extract_mean)
+mean_CZ_error = df['CZ error '].mean()
+print(f"mean_CZ_error: {mean_CZ_error}")
+
+df['RZZ error '] = df['RZZ error '].apply(extract_mean)
+mean_RZZ_error = df['RZZ error '].mean()
+print(f"mean_RZZ_error: {mean_RZZ_error}")
+
+df['Gate time (ns)'] = df['Gate time (ns)'].apply(extract_mean)
+mean_Gate_time = df['Gate time (ns)'].mean()
+print(f"mean Gate time (ns) : {mean_Gate_time}")
 
 
 # Configuration
-NUM_QUBITS = 3
+NUM_QUBITS = 4
 POP_SIZE = 10
 N_GEN = 100
 MUTATION_RATE = 0.4
 ELITE_SIZE = 2
-LAMBDA_DEPTH = 0.1
+LAMBDA_DEPTH = 0.025
+LAMBDA_CNOT = 0.1
+LAMBDA_GATE = 0.25*1e3
 
 # Target distribution
-x = np.arange(NUM_QUBITS)
+x = np.arange(2**NUM_QUBITS)
 p_target = np.exp(-0.5 * ((x - 3.5) / 1.0)**2)
 p_target /= np.sum(p_target)
 psi_target = np.sqrt(p_target)
@@ -59,8 +91,27 @@ def fitness(ind):
     state = Statevector.from_instruction(qc)
     probs = np.abs(state.data)**2
     kl = kl_divergence(p_target, probs)
-    penalty = LAMBDA_DEPTH * qc.depth()
-    return -(kl + penalty)  # maximize negative loss
+    penalty_depth = LAMBDA_DEPTH * qc.depth()
+    cnot_count = 0
+
+    gate_error_penalty = 0
+    for gate in ind:
+        if gate[0] == 'cx':
+            cnot_count += 1
+        elif gate[0] == 'rx':
+            gate_error_penalty += mean_RX_error
+        elif gate[0] == 'sx':
+            gate_error_penalty += mean_SX_error
+        elif gate[0] == 'x':
+            gate_error_penalty += mean_X_error
+        elif gate[0] == 'cz':
+            gate_error_penalty += mean_CZ_error
+
+    # Penalize based on number of CNOTs
+    penalty_cnot = LAMBDA_CNOT * cnot_count
+    gate_error_penalty *= LAMBDA_GATE
+    print(f"penalty depth: {penalty_depth}, penalty cnot: {penalty_cnot}, kl: {kl}, gate error penalty: {gate_error_penalty}")
+    return -(kl + penalty_depth + penalty_cnot + gate_error_penalty)  # maximize negative loss
 
 # GA functions
 def mutate(ind):
@@ -98,6 +149,8 @@ def random_individual(length=10):
 population = [random_individual() for _ in range(POP_SIZE)]
 best_fitness = -np.inf
 best_individual = None
+
+# Run GA
 
 for gen in range(N_GEN):
     fitnesses = [fitness(ind) for ind in population]
@@ -137,5 +190,3 @@ plt.title(f'Final KL Divergence: {kl_best:.5f}')
 plt.legend()
 plt.tight_layout()
 plt.show()
-
-
