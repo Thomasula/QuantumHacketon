@@ -46,7 +46,7 @@ def build_circuit(gates):
             getattr(qc, gate[0])(gate[2], gate[1])
         elif gate[0] == 'cx':
             qc.cx(gate[1], gate[2])
-        elif: gate[0] == 'cz':
+        elif gate[0] == 'cz':
             qc.cz(gate[1], gate[2])
         else:
             getattr(qc, gate[0])(gate[1])
