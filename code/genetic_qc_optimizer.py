@@ -14,7 +14,7 @@ ELITE_SIZE = 2
 LAMBDA_DEPTH = 0.1
 
 # Target distribution
-x = np.arange(2**NUM_QUBITS)
+x = np.arange(NUM_QUBITS)
 p_target = np.exp(-0.5 * ((x - 3.5) / 1.0)**2)
 p_target /= np.sum(p_target)
 psi_target = np.sqrt(p_target)
