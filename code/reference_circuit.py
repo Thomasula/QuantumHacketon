@@ -1,18 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Previous notebooks
-
-# In[1]:
-
-
-get_ipython().run_line_magic('run', 'IBM_runtime_setup.ipynb')
-
-
-# Libraries
-
-# In[2]:
-
+from IBM_runtime_setup import *
 
 import qiskit
 import numpy as np
@@ -76,7 +65,7 @@ U = householder_unitary(psi)
 
 
 # Reference circuit creation
-# 
+#
 # - create circuit using qiskit function: UnitaryGate - not optimal, but good enough as a starting point
 
 # In[4]:

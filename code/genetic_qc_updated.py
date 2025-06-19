@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from reference_circuit import *
+
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -8,7 +10,6 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 import pandas as pd
 
-get_ipython().run_line_magic('run', 'reference_circuit.ipynb')
 
 # Read-in error table
 df = pd.read_csv('../ibm_aachen_calibrations_2025-06-19T09_34_49Z.csv')
