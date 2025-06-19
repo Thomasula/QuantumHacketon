@@ -10,6 +10,7 @@ NUM_QUBITS = 3
 POP_SIZE = 50
 N_GEN = 100
 MUTATION_RATE = 0.5
+CROSSOVER_RATE = 0.6
 ELITE_SIZE = 15
 LAMBDA_DEPTH = 0.1
 
@@ -109,9 +110,10 @@ for gen in range(N_GEN):
     new_pop = select(population, fitnesses, temperature=0.6)
     while len(new_pop) < POP_SIZE:
         p1, p2 = best_individual, random.choice(new_pop)
-        child = crossover(p1, p2)
         if random.random() < MUTATION_RATE:
-            child = mutate(child)
+            child = mutate(p1)
+        if random.random() < CROSSOVER_RATE:
+            child = crossover(p1, p2)
         new_pop.append(child)
     population = new_pop
 
