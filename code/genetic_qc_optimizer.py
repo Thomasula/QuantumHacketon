@@ -7,10 +7,10 @@ from qiskit.quantum_info import Statevector
 
 # Configuration
 NUM_QUBITS = 3
-POP_SIZE = 10
-N_GEN = 50
+POP_SIZE = 50
+N_GEN = 100
 MUTATION_RATE = 0.5
-ELITE_SIZE = 2
+ELITE_SIZE = 15
 LAMBDA_DEPTH = 0.1
 
 # Target distribution
@@ -57,6 +57,13 @@ def fitness(ind):
     penalty = LAMBDA_DEPTH * qc.depth()
     return -(kl + penalty)  # maximize negative loss
 
+
+def fitness_tvd(ind):
+    qc = build_circuit(ind)
+    state = Statevector.from_instruction(qc)
+    probs = np.abs(state.data)**2
+    return -0.5 * np.sum(abs(p_target - probs))
+
 # GA functions
 def mutate(ind):
     ind = ind.copy()
@@ -71,7 +78,7 @@ def crossover(p1, p2):
         return p1
     point = random.randint(1, min(len(p1), len(p2)) - 1)
     return p1[:point] + p2[point:]
-    
+
 def softmax(x, temperature=0.5): # higher temperature makes the distribution more flat (more uniform selection)
     # recomended temperature [0.1, 0.8]
     x = np.array(x)
@@ -81,11 +88,8 @@ def softmax(x, temperature=0.5): # higher temperature makes the distribution mor
 
 def select(pop, fitnesses, temperature=0.5):
     probs = softmax(fitnesses, temperature)
-    selected = random.choices(pop, weights=probs, k=POP_SIZE - ELITE_SIZE)
-    # Keep elites deterministically
-    elite_indices = np.argsort(fitnesses)[-ELITE_SIZE:]
-    elites = [pop[i] for i in elite_indices]
-    return elites + selected
+    selected = random.choices(pop, weights=probs, k=ELITE_SIZE)
+    return selected
 
 def random_individual(length=10):
     return [random_gate() for _ in range(length)]
@@ -96,16 +100,15 @@ best_fitness = -np.inf
 best_individual = None
 
 for gen in range(N_GEN):
-    fitnesses = [fitness(ind) for ind in population]
+    fitnesses = [fitness_tvd(ind) for ind in population]
     max_fit = max(fitnesses)
     print(f"Gen {gen}, best fitness: {-max_fit:.4f}")
     if max_fit > best_fitness:
         best_fitness = max_fit
         best_individual = population[np.argmax(fitnesses)]
-    selected = select(population, fitnesses)
-    new_pop = selected[:ELITE_SIZE]
+    new_pop = select(population, fitnesses, temperature=0.6)
     while len(new_pop) < POP_SIZE:
-        p1, p2 = random.sample(selected, 2)
+        p1, p2 = best_individual, random.choice(new_pop)
         child = crossover(p1, p2)
         if random.random() < MUTATION_RATE:
             child = mutate(child)
@@ -134,4 +137,3 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-print("Best circuit:\n", qc_best.draw())
