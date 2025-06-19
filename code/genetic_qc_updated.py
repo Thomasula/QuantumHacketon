@@ -27,9 +27,6 @@ def extract_mean(s):
     filtered = [v for v in values if v != 1.0]
     return sum(filtered) / len(filtered) if filtered else None  # or 0, np.nan, etc.
 
-
-
-
 df['CZ error '] = df['CZ error '].apply(extract_mean)
 mean_CZ_error = df['CZ error '].mean()
 print(f"mean_CZ_error: {mean_CZ_error}")
@@ -45,11 +42,11 @@ print(f"mean Gate time (ns) : {mean_Gate_time}")
 
 # Configuration
 NUM_QUBITS = 3
-POP_SIZE = 50
+POP_SIZE = 100
 N_GEN = 100
 MUTATION_RATE = 0.5
 CROSSOVER_RATE = 0.6
-ELITE_SIZE = 15
+ELITE_SIZE = 20
 LAMBDA_DEPTH = 0.1
 LAMBDA_CNOT = 0.1
 LAMBDA_GATE = 0.25*1e3
@@ -159,22 +156,15 @@ def random_individual(length=10):
     return [random_gate() for _ in range(length)]
 
 
-# GA loop
-
-
+## Create first individual based on some math magic
 adam = []
-#print(population)
 
 GHZ = np.array([1, 0, 0, 0, 0, 0, 0, 1]) / np.sqrt(2)
 GHZ_evolve_matrix = householder_unitary(GHZ)
 qc_ghz = create_reference_circuit(GHZ_evolve_matrix)
 
-#print(build_circuit(GATES))
-#print(qc_ghz)
-
 indicies_used = set()
 for gate in qc_ghz.data:
-    #print(gate)
     adam.append([gate[0].name, gate[1][0]._index, gate[1][1]._index if len(gate[1]) > 1 else None])
     indicies_used.add(gate[1][0]._index)
     if adam[-1][-1] is None:
@@ -196,6 +186,11 @@ for i in range(len(adam)):
         adam[i][2] = mapped_index.index(adam[i][2])
 
 print(adam)
+## Adam creation end
+
+
+## POPULATION INIT
+### choose this for biblical population
 population = [adam]
 
 # generate elites as adam mutations
@@ -206,16 +201,14 @@ while len(population) < ELITE_SIZE:
 while len(population) < POP_SIZE:
     population.append(random_individual())
 
-
-# In[41]:
-
-
+### choose this for random population
 #population = [random_individual() for _ in range(POP_SIZE)]
+
+### END population init
+
+
 best_fitness = -np.inf
 best_individual = None
-
-# Run GA
-
 for gen in range(N_GEN):
     fitnesses = [fitness_tvd(ind) for ind in population]
     max_fit = max(fitnesses)
@@ -236,15 +229,17 @@ for gen in range(N_GEN):
 
 # Evaluate best individual
 qc_best = build_circuit(best_individual)
+print("Done.")
+print("Best individual info:")
+print("Circuit depth:", qc_best.depth())
 print(qc_best.draw(output='text'))
 state_best = Statevector.from_instruction(qc_best)
 probs_best = np.abs(state_best.data) ** 2
 kl_best = kl_divergence(p_target, probs_best)
 
-# Plot
+## Graphical show
 labels = [f'{i:03b}' for i in range(len(p_target))]
 x = np.arange(len(p_target))
-print("Best circuit:\n", qc_best.draw())
 
 plt.figure(figsize=(10, 5))
 plt.bar(x - 0.15, p_target, width=0.3, label='Target', align='center')
