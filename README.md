@@ -1,2 +1,2 @@
 # QuantumHacketon
-Team repository for quantum hacketon team
+Team repository for quantum hacketon
