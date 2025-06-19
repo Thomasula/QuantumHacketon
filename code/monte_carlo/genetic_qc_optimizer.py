@@ -1,9 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import scipy.io as sio
-
-import numpy as np
 import random
 import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit
@@ -41,14 +36,15 @@ print(f"mean Gate time (ns) : {mean_Gate_time}")
 
 
 # Configuration
-NUM_QUBITS = 2
+NUM_QUBITS = 3
 POP_SIZE = 10
 N_GEN = 100
 MUTATION_RATE = 0.4
+alpha = 0.9
 ELITE_SIZE = 2
 LAMBDA_DEPTH = 0.025
 LAMBDA_CNOT = 0.1
-LAMBDA_GATE = 0.25*1e3
+LAMBDA_GATE = 2*1e1
 
 # Target distribution
 # x = np.arange(2**NUM_QUBITS)
@@ -182,6 +178,7 @@ for gen in range(N_GEN):
         if random.random() < MUTATION_RATE:
             child = mutate(child)
         new_pop.append(child)
+    MUTATION_RATE *= alpha
     population = new_pop
 
 # Evaluate best individual
@@ -202,6 +199,44 @@ delta_x = 1 / (2**NUM_QUBITS)
 estimated_integral = np.sum(probs_best * f_vals)
 print(f"True integral: {true_integral}, Estimated: {estimated_integral}")
 
+# cumulative_integral = []
+# cum_sum = 0
+# for i in range(len(f_vals)):
+#     cum_sum += probs_best[i] * f_vals[i]
+#     cumulative_integral.append(cum_sum)
+#
+# plt.plot(cumulative_integral)
+# plt.show()
+from scipy.integrate import cumtrapz
+
+x_vals = (np.arange(len(f_vals)) + 0.5) / len(f_vals)
+estimated_cumulative = np.cumsum(probs_best * f_vals)
+true_cumulative = cumtrapz(f_vals, x_vals, initial=0)
+
+# Plot cumulative integrals
+plt.figure(figsize=(10, 8))
+
+plt.subplot(2, 1, 1)
+plt.plot(x_vals, estimated_cumulative, label="Quantum Estimated Cumulative")
+plt.plot(x_vals, true_cumulative, '--', label="True Cumulative Integral")
+plt.xlabel("x")
+plt.ylabel("Cumulative Integral")
+plt.title("Cumulative Integral: Quantum vs True")
+plt.legend()
+plt.grid(True)
+
+# Plot absolute error
+plt.subplot(2, 1, 2)
+abs_error = np.abs(estimated_cumulative - true_cumulative)
+plt.plot(x_vals, abs_error, color='red', label="Absolute Error")
+plt.xlabel("x")
+plt.ylabel("Error")
+plt.title("Cumulative Integral Absolute Error")
+plt.legend()
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
 
 
 plt.figure(figsize=(10, 5))
@@ -214,7 +249,3 @@ plt.title(f'Final KL Divergence: {kl_best:.5f}')
 plt.legend()
 plt.tight_layout()
 plt.show()
-
-
-
-
