@@ -71,10 +71,21 @@ def crossover(p1, p2):
         return p1
     point = random.randint(1, min(len(p1), len(p2)) - 1)
     return p1[:point] + p2[point:]
+    
+def softmax(x, temperature=0.5): # higher temperature makes the distribution more flat (more uniform selection)
+    # recomended temperature [0.1, 0.8]
+    x = np.array(x)
+    x = x - np.max(x)  # For numerical stability
+    exps = np.exp(x / temperature)
+    return exps / np.sum(exps)
 
-def select(pop, fitnesses):
-    sorted_pop = [x for _, x in sorted(zip(fitnesses, pop), reverse=True)]
-    return sorted_pop[:ELITE_SIZE] + random.choices(sorted_pop[:5], k=POP_SIZE - ELITE_SIZE)
+def select(pop, fitnesses, temperature=0.5):
+    probs = softmax(fitnesses, temperature)
+    selected = random.choices(pop, weights=probs, k=POP_SIZE - ELITE_SIZE)
+    # Keep elites deterministically
+    elite_indices = np.argsort(fitnesses)[-ELITE_SIZE:]
+    elites = [pop[i] for i in elite_indices]
+    return elites + selected
 
 def random_individual(length=10):
     return [random_gate() for _ in range(length)]
