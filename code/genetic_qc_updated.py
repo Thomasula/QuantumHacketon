@@ -10,8 +10,25 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 import pandas as pd
 
+## CONFIGURATION
+NUM_QUBITS = 3
+POP_SIZE = 100
+N_GEN = 100
+MUTATION_RATE = 0.5
+CROSSOVER_RATE = 0.3
+ELITE_SIZE = 20
+LAMBDA_DEPTH = 0.1
+LAMBDA_CNOT = 0.1
+LAMBDA_GATE = 0.25*1e3
 
-# Read-in error table
+## TARGET DISTRIBUTION
+x = np.arange(2**NUM_QUBITS)
+p_target = np.exp(-0.5 * ((x - 3.5) / 1.0)**2)
+p_target /= np.sum(p_target)
+psi_target = np.sqrt(p_target)
+
+
+## Read-in error table
 df = pd.read_csv('../ibm_aachen_calibrations_2025-06-19T09_34_49Z.csv')
 # print(df.head())
 
@@ -39,33 +56,14 @@ df['Gate time (ns)'] = df['Gate time (ns)'].apply(extract_mean)
 mean_Gate_time = df['Gate time (ns)'].mean()
 print(f"mean Gate time (ns) : {mean_Gate_time}")
 
-
-# Configuration
-NUM_QUBITS = 3
-POP_SIZE = 100
-N_GEN = 100
-MUTATION_RATE = 0.5
-CROSSOVER_RATE = 0.6
-ELITE_SIZE = 20
-LAMBDA_DEPTH = 0.1
-LAMBDA_CNOT = 0.1
-LAMBDA_GATE = 0.25*1e3
-
-# Target distribution
-x = np.arange(2**NUM_QUBITS)
-p_target = np.exp(-0.5 * ((x - 3.5) / 1.0)**2)
-p_target /= np.sum(p_target)
-psi_target = np.sqrt(p_target)
-
 # Helper functions
 def kl_divergence(p, q, eps=1e-10):
     p = np.clip(p, eps, 1)
     q = np.clip(q, eps, 1)
     return np.sum(p * np.log(p / q))
 
+
 GATES = ['h', 'x', 'y', 'z', 'rx', 'ry', 'rz', 'cx', 'sx', 'cz']
-
-
 def random_gate():
     g = random.choice(GATES)
     if g in ['rx', 'ry', 'rz']:
@@ -156,57 +154,56 @@ def random_individual(length=10):
     return [random_gate() for _ in range(length)]
 
 
-## Create first individual based on some math magic
-adam = []
+## Create ADAM - first individual, based on some math magic
+def create_adam():
+    adam = []
 
-GHZ = np.array([1, 0, 0, 0, 0, 0, 0, 1]) / np.sqrt(2)
-GHZ_evolve_matrix = householder_unitary(GHZ)
-qc_ghz = create_reference_circuit(GHZ_evolve_matrix)
+    GHZ = np.array([1, 0, 0, 0, 0, 0, 0, 1]) / np.sqrt(2)
+    GHZ_evolve_matrix = householder_unitary(GHZ)
+    qc_ghz = create_reference_circuit(GHZ_evolve_matrix)
 
-indicies_used = set()
-for gate in qc_ghz.data:
-    adam.append([gate[0].name, gate[1][0]._index, gate[1][1]._index if len(gate[1]) > 1 else None])
-    indicies_used.add(gate[1][0]._index)
-    if adam[-1][-1] is None:
-        adam[-1].pop()
-    if gate[0].params:
-        adam[-1] += gate[0].params
-    if len(gate[1]) > 1:
-        indicies_used.add(gate[1][1]._index)
+    indicies_used = set()
+    for gate in qc_ghz.data:
+        adam.append([gate[0].name, gate[1][0]._index, gate[1][1]._index if len(gate[1]) > 1 else None])
+        indicies_used.add(gate[1][0]._index)
+        if adam[-1][-1] is None:
+            adam[-1].pop()
+        if gate[0].params:
+            adam[-1] += gate[0].params
+        if len(gate[1]) > 1:
+            indicies_used.add(gate[1][1]._index)
 
 
-print(adam)
-mapped_index = sorted(list(indicies_used))
-print(mapped_index)
-assert NUM_QUBITS == len(indicies_used)
+    mapped_index = sorted(list(indicies_used))
+    assert NUM_QUBITS == len(indicies_used)
 
-for i in range(len(adam)):
-    adam[i][1] = mapped_index.index(adam[i][1])
-    if len(adam[i]) > 2 and adam[i][2] in indicies_used:
-        adam[i][2] = mapped_index.index(adam[i][2])
+    for i in range(len(adam)):
+        adam[i][1] = mapped_index.index(adam[i][1])
+        if len(adam[i]) > 2 and adam[i][2] in indicies_used:
+            adam[i][2] = mapped_index.index(adam[i][2])
 
-print(adam)
-## Adam creation end
+    return adam
 
 
 ## POPULATION INIT
 ### choose this for biblical population
-population = [adam]
+#adam = create_adam()
+#population = [adam]
 
 # generate elites as adam mutations
-while len(population) < ELITE_SIZE:
-    population.append(mutate(adam))
+#while len(population) < ELITE_SIZE:
+#    population.append(mutate(adam))
 
 # generate rest random
-while len(population) < POP_SIZE:
-    population.append(random_individual())
+#while len(population) < POP_SIZE:
+#    population.append(random_individual())
 
 ### choose this for random population
-#population = [random_individual() for _ in range(POP_SIZE)]
+population = [random_individual() for _ in range(POP_SIZE)]
 
 ### END population init
 
-
+## MAIN GA LOOP
 best_fitness = -np.inf
 best_individual = None
 for gen in range(N_GEN):
@@ -216,7 +213,7 @@ for gen in range(N_GEN):
     if max_fit > best_fitness:
         best_fitness = max_fit
         best_individual = population[np.argmax(fitnesses)]
-    new_pop = select(population, fitnesses, temperature=0.6)
+    new_pop = select(population, fitnesses, temperature=0.4)
     while len(new_pop) < POP_SIZE:
         p1, p2 = random.choice(new_pop), random.choice(new_pop)
         child = p1
@@ -227,17 +224,19 @@ for gen in range(N_GEN):
         new_pop.append(child)
     population = new_pop
 
+## DATA PRINT-OUT
 # Evaluate best individual
 qc_best = build_circuit(best_individual)
-print("Done.")
+print("Done.\n")
 print("Best individual info:")
 print("Circuit depth:", qc_best.depth())
 print(qc_best.draw(output='text'))
 state_best = Statevector.from_instruction(qc_best)
 probs_best = np.abs(state_best.data) ** 2
 kl_best = kl_divergence(p_target, probs_best)
+tvd_best = 0.5 * np.sum(abs(p_target - probs_best))
 
-## Graphical show
+## GRAPH
 labels = [f'{i:03b}' for i in range(len(p_target))]
 x = np.arange(len(p_target))
 
@@ -247,7 +246,7 @@ plt.bar(x + 0.15, probs_best, width=0.3, label='Best Circuit', align='center')
 plt.xticks(x, labels)
 plt.xlabel('Basis State')
 plt.ylabel('Probability')
-plt.title(f'Final KL Divergence: {kl_best:.5f}')
+plt.title(f'Final KL Divergence: {kl_best:.5f} and TVD: {tvd_best:.5f}')
 plt.legend()
 plt.tight_layout()
 plt.show()
